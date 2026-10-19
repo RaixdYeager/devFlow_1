@@ -6,6 +6,7 @@ import GitHubRepository from "../components/GitHubRepository";
 import "./ProjectDetail.css";
 
 const API_URL = "/api/accounts";
+
 const getProjectUrl = (id) => `${API_URL}/projects/${id}/`;
 const getTasksUrl = (id) => `${API_URL}/projects/${id}/tasks/`;
 const getMembersUrl = (id) => `${API_URL}/projects/${id}/members/`;
@@ -130,6 +131,34 @@ function ProjectDetail() {
   useEffect(() => {
     loadProjectData();
   }, [loadProjectData]);
+
+  // Automatically refresh tasks after importing a GitHub issue.
+  useEffect(() => {
+    const handleTasksUpdated = (event) => {
+      const eventProjectId = event.detail?.projectId;
+
+      if (
+        eventProjectId !== undefined &&
+        String(eventProjectId) === String(id)
+      ) {
+        fetchTasks().catch((err) => {
+          console.error(
+            "Failed to refresh tasks after GitHub import:",
+            err
+          );
+        });
+      }
+    };
+
+    window.addEventListener("devflow:tasks-updated", handleTasksUpdated);
+
+    return () => {
+      window.removeEventListener(
+        "devflow:tasks-updated",
+        handleTasksUpdated
+      );
+    };
+  }, [id, fetchTasks]);
 
   const handleProjectFormChange = (event) => {
     const { name, value } = event.target;
@@ -473,7 +502,9 @@ function ProjectDetail() {
         <div className="project-actions">
           <button
             type="button"
-            onClick={() => setEditingProject((previous) => !previous)}
+            onClick={() =>
+              setEditingProject((previous) => !previous)
+            }
           >
             {editingProject ? "Cancel Edit" : "Edit Project"}
           </button>
@@ -497,7 +528,10 @@ function ProjectDetail() {
       )}
 
       {editingProject && (
-        <form onSubmit={handleSaveProject} className="project-edit-form">
+        <form
+          onSubmit={handleSaveProject}
+          className="project-edit-form"
+        >
           <h2>Edit Project</h2>
 
           <label htmlFor="project-name">Project Name</label>
@@ -570,7 +604,10 @@ function ProjectDetail() {
         </div>
 
         {showMemberForm && (
-          <form onSubmit={handleAddMember} className="member-form">
+          <form
+            onSubmit={handleAddMember}
+            className="member-form"
+          >
             <label htmlFor="team-user">Select User</label>
 
             <select
@@ -592,7 +629,9 @@ function ProjectDetail() {
                 )
                 .map((user) => (
                   <option key={user.id} value={user.id}>
-                    {user.username || user.email || `User ${user.id}`}
+                    {user.username ||
+                      user.email ||
+                      `User ${user.id}`}
                   </option>
                 ))}
             </select>
@@ -659,7 +698,9 @@ function ProjectDetail() {
 
             <button
               type="button"
-              onClick={() => setShowTaskForm((previous) => !previous)}
+              onClick={() =>
+                setShowTaskForm((previous) => !previous)
+              }
             >
               {showTaskForm ? "Cancel" : "Create Task"}
             </button>
@@ -667,7 +708,10 @@ function ProjectDetail() {
         </div>
 
         {showTaskForm && (
-          <form onSubmit={handleCreateTask} className="task-form">
+          <form
+            onSubmit={handleCreateTask}
+            className="task-form"
+          >
             <label htmlFor="task-title">Task Title</label>
 
             <input
@@ -719,7 +763,9 @@ function ProjectDetail() {
                 <div className="task-card-header">
                   <h3>{task.title}</h3>
 
-                  <span className={`priority priority-${getPriority(task)}`}>
+                  <span
+                    className={`priority priority-${getPriority(task)}`}
+                  >
                     {task.priority || "Medium"}
                   </span>
                 </div>
@@ -747,9 +793,7 @@ function ProjectDetail() {
                 </div>
 
                 <div className="task-card-actions">
-                  <Link
-                    to={`/projects/${id}/tasks/${task.id}`}
-                  >
+                  <Link to={`/projects/${id}/tasks/${task.id}`}>
                     View Details
                   </Link>
 

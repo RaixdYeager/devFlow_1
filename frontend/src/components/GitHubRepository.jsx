@@ -5,46 +5,50 @@ import apiFetch from "../api";
 function GitHubRepository({ projectId }) {
   const [repository, setRepository] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [connecting, setConnecting] = useState(false);
   const [repoInput, setRepoInput] = useState("");
-  const [showConnectForm, setShowConnectForm] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [issueFilter, setIssueFilter] = useState("all");
+  const [notice, setNotice] = useState("");
+  const [importingIssues, setImportingIssues] = useState({});
+  const [importedIssues, setImportedIssues] = useState({});
 
   const endpoint = `/api/accounts/projects/${projectId}/github/`;
 
-  const fetchRepository = useCallback(async () => {
-    if (!projectId) {
-      setError("Project ID is missing.");
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const response = await apiFetch(endpoint);
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(
-          data.detail || data.error || "Failed to load GitHub repository."
-        );
-      }
-
-      if (data.connected) {
-        setRepository(data);
-        setRepoInput(data.repo_name || "");
+  const fetchRepository = useCallback(
+    async (showLoader = true) => {
+      if (showLoader) {
+        setLoading(true);
       } else {
-        setRepository(null);
-        setRepoInput("");
+        setRefreshing(true);
       }
-    } catch (err) {
-      setError(err.message || "Unable to connect to the server.");
-    } finally {
-      setLoading(false);
-    }
-  }, [endpoint, projectId]);
+
+      setError("");
+      setNotice("");
+
+      try {
+        const response = await apiFetch(endpoint);
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(
+            data.error || "Failed to load GitHub repository."
+          );
+        }
+
+        const data = await response.json();
+        setRepository(data);
+      } catch (err) {
+        setError(err.message || "Unable to load GitHub information.");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [endpoint]
+  );
 
   useEffect(() => {
     fetchRepository();
@@ -53,52 +57,50 @@ function GitHubRepository({ projectId }) {
   const connectRepository = async (event) => {
     event.preventDefault();
 
-    const repo = repoInput.trim();
-
-    if (!repo) {
-      setError("Enter a GitHub repository URL or owner/repository.");
+    if (!repoInput.trim()) {
+      setError("Enter a GitHub repository URL or owner/repo.");
       return;
     }
 
     setConnecting(true);
     setError("");
+    setNotice("");
 
     try {
       const response = await apiFetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          github_repo: repo,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ github_repo: repoInput.trim() }),
       });
 
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(
-          data.detail || data.error || "Failed to connect repository."
-        );
+        throw new Error(data.error || "Could not connect repository.");
       }
 
-      setShowConnectForm(false);
-      await fetchRepository();
+      setRepoInput("");
+      setNotice("GitHub repository connected successfully.");
+      await fetchRepository(false);
     } catch (err) {
-      setError(err.message || "Could not connect the repository.");
+      setError(err.message || "Could not connect repository.");
     } finally {
       setConnecting(false);
     }
   };
 
   const disconnectRepository = async () => {
-    const confirmed = window.confirm(
-      "Are you sure you want to disconnect this GitHub repository?"
-    );
+    if (
+      !window.confirm(
+        "Disconnect this GitHub repository from the project?"
+      )
+    ) {
+      return;
+    }
 
-    if (!confirmed) return;
-
+    setDisconnecting(true);
     setError("");
+    setNotice("");
 
     try {
       const response = await apiFetch(endpoint, {
@@ -108,16 +110,79 @@ function GitHubRepository({ projectId }) {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
+        throw new Error(data.error || "Could not disconnect repository.");
+      }
+
+      setRepository({
+        connected: false,
+        repo: null,
+        commits: [],
+        issues: [],
+      });
+
+      setImportedIssues({});
+      setNotice("GitHub repository disconnected.");
+    } catch (err) {
+      setError(err.message || "Could not disconnect repository.");
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
+  const importIssue = async (issue) => {
+    if (!issue?.number) {
+      setError("This GitHub issue has no valid issue number.");
+      return;
+    }
+
+    const issueNumber = issue.number;
+
+    setImportingIssues((previous) => ({
+      ...previous,
+      [issueNumber]: true,
+    }));
+
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await apiFetch(
+        `/api/accounts/projects/${projectId}/github/issues/${issueNumber}/import/`,
+        { method: "POST" }
+      );
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
         throw new Error(
-          data.detail || data.error || "Failed to disconnect repository."
+          data.error || "Could not import this GitHub issue."
         );
       }
 
-      setRepository(null);
-      setRepoInput("");
-      setShowConnectForm(false);
+      setImportedIssues((previous) => ({
+        ...previous,
+        [issueNumber]: true,
+      }));
+
+      setNotice(
+        data.already_imported
+          ? `GitHub issue #${issueNumber} was already imported.`
+          : `GitHub issue #${issueNumber} imported as a DevFlow task!`
+      );
+
+      // Notify the parent page in case it listens for task updates.
+      window.dispatchEvent(
+        new CustomEvent("devflow:tasks-updated", {
+          detail: { projectId, issueNumber },
+        })
+      );
     } catch (err) {
-      setError(err.message || "Could not disconnect the repository.");
+      setError(err.message || "Could not import this GitHub issue.");
+    } finally {
+      setImportingIssues((previous) => ({
+        ...previous,
+        [issueNumber]: false,
+      }));
     }
   };
 
@@ -126,311 +191,391 @@ function GitHubRepository({ projectId }) {
 
     const date = new Date(dateString);
 
-    if (Number.isNaN(date.getTime())) return "Date unavailable";
+    if (Number.isNaN(date.getTime())) {
+      return "Date unavailable";
+    }
 
     return date.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
       day: "numeric",
+      month: "short",
+      year: "numeric",
     });
   };
 
+  const issues = Array.isArray(repository?.issues)
+    ? repository.issues
+    : [];
+
+  const commits = Array.isArray(repository?.commits)
+    ? repository.commits
+    : [];
+
+  const filteredIssues = issues.filter((issue) => {
+    if (issueFilter === "open") return issue.state === "open";
+    if (issueFilter === "closed") return issue.state === "closed";
+    return true;
+  });
+
+  const isConnected =
+    repository?.connected === true &&
+    repository?.valid !== false &&
+    Boolean(repository?.repo_name);
+
   if (loading) {
     return (
-      <section className="github-repository">
-        <div className="github-section-heading">
-          <span className="github-eyebrow">DEVELOPMENT ACTIVITY</span>
-          <h2>GitHub Repository</h2>
-          <p>Repository information and recent development activity.</p>
+      <section className="project-detail-card github-repository-section">
+        <div className="project-section-heading">
+          <div>
+            <h2>GitHub Integration</h2>
+            <p>Loading repository information...</p>
+          </div>
         </div>
 
-        <div className="github-status-message">Loading GitHub repository...</div>
+        <div className="github-loading">
+          <span className="github-spinner" />
+          <span>Connecting to GitHub...</span>
+        </div>
       </section>
     );
   }
 
   return (
-    <section className="github-repository">
-      <div className="github-section-heading">
-        <span className="github-eyebrow">DEVELOPMENT ACTIVITY</span>
-        <h2>GitHub Repository</h2>
-        <p>Repository information and recent development activity.</p>
+    <section className="project-detail-card github-repository-section">
+      <div className="project-section-heading github-repo-header">
+        <div>
+          <h2>GitHub Integration</h2>
+          <p>Connect your repository and track development activity.</p>
+        </div>
+
+        <button
+          type="button"
+          className="github-refresh-button"
+          onClick={() => fetchRepository(false)}
+          disabled={refreshing}
+        >
+          <span
+            className={
+              refreshing
+                ? "github-refresh-icon spinning"
+                : "github-refresh-icon"
+            }
+          >
+            ↻
+          </span>
+          {refreshing ? "Refreshing..." : "Refresh"}
+        </button>
       </div>
 
       {error && (
-        <div className="github-error" role="alert">
+        <div className="github-message github-error" role="alert">
           <span>{error}</span>
-          <button
-            type="button"
-            className="github-error-dismiss"
-            onClick={() => setError("")}
-            aria-label="Dismiss error"
-          >
+          <button type="button" onClick={() => setError("")}>
             ×
           </button>
         </div>
       )}
 
-      {!repository ? (
-        <div className="github-empty-state">
-          <div className="github-empty-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="42" height="42" fill="currentColor">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.4.6.1.8-.3.8-.6v-2.2c-3.34.7-4.04-1.4-4.04-1.4-.55-1.4-1.33-1.8-1.33-1.8-1.1-.75.08-.74.08-.74 1.2.08 1.84 1.23 1.84 1.23 1.08 1.84 2.83 1.3 3.52 1 .1-.78.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.95 0-1.3.47-2.36 1.24-3.2-.12-.3-.54-1.52.12-3.16 0 0 1.01-.32 3.3 1.22a11.4 11.4 0 0 1 6 0c2.29-1.54 3.3-1.22 3.3-1.22.66 1.64.24 2.86.12 3.16.77.84 1.24 1.9 1.24 3.2 0 4.62-2.8 5.64-5.48 5.94.43.37.81 1.1.81 2.22v3.3c0 .3.2.7.8.6A12.01 12.01 0 0 0 24 12C24 5.37 18.63 0 12 0Z" />
+      {notice && (
+        <div className="github-message github-success" role="status">
+          <span>{notice}</span>
+          <button type="button" onClick={() => setNotice("")}>
+            ×
+          </button>
+        </div>
+      )}
+
+      {!isConnected ? (
+        <div className="github-connect-card">
+          <div className="github-connect-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="38" height="38" fill="currentColor">
+              <path d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.55.1.76-.24.76-.53v-2.08c-3.1.67-3.76-1.32-3.76-1.32-.5-1.29-1.24-1.63-1.24-1.63-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15.99 1.7 2.6 1.21 3.23.93.1-.72.39-1.21.71-1.49-2.48-.28-5.09-1.24-5.09-5.52 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.05 1.15a10.6 10.6 0 0 1 5.55 0c2.11-1.45 3.05-1.15 3.05-1.15.61 1.54.23 2.68.11 2.96.72.78 1.15 1.78 1.15 3 0 4.29-2.62 5.23-5.11 5.51.4.35.76 1.02.76 2.06V22c0 .29.2.63.77.52A11.1 11.1 0 0 0 12 .9Z" />
             </svg>
           </div>
 
-          <h3>No repository connected</h3>
+          <h3>
+            {repository?.connected && repository?.valid === false
+              ? "Repository unavailable"
+              : "Connect your GitHub repository"}
+          </h3>
+
           <p>
-            Connect a GitHub repository to view its details, statistics, and
-            recent commits here.
+            Enter a public GitHub repository to view its details, recent
+            commits, and issues directly in DevFlow.
           </p>
 
-          {!showConnectForm && (
+          <form className="github-connect-form" onSubmit={connectRepository}>
+            <input
+              type="text"
+              value={repoInput}
+              onChange={(event) => setRepoInput(event.target.value)}
+              placeholder="owner/repository or GitHub URL"
+              aria-label="GitHub repository"
+              required
+            />
+
             <button
-              type="button"
-              className="github-primary-button"
-              onClick={() => setShowConnectForm(true)}
+              type="submit"
+              className="project-primary-button"
+              disabled={connecting}
             >
-              + Connect Repository
+              {connecting ? "Connecting..." : "Connect Repository"}
             </button>
-          )}
-
-          {showConnectForm && (
-            <form className="github-connect-form" onSubmit={connectRepository}>
-              <label htmlFor={`github-repo-${projectId}`}>
-                Repository URL or owner/repository
-              </label>
-
-              <input
-                id={`github-repo-${projectId}`}
-                type="text"
-                value={repoInput}
-                onChange={(event) => setRepoInput(event.target.value)}
-                placeholder="e.g. django/django"
-                autoComplete="off"
-                required
-              />
-
-              <div className="github-form-actions">
-                <button
-                  type="submit"
-                  className="github-primary-button"
-                  disabled={connecting}
-                >
-                  {connecting ? "Connecting..." : "Connect Repository"}
-                </button>
-
-                <button
-                  type="button"
-                  className="github-secondary-button"
-                  onClick={() => {
-                    setShowConnectForm(false);
-                    setRepoInput("");
-                    setError("");
-                  }}
-                  disabled={connecting}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
+          </form>
         </div>
       ) : (
         <>
-          <div className="github-repo-header">
-            <div className="github-repo-information">
-              <div className="github-repo-title-row">
-                <h3>{repository.repo_name || "GitHub Repository"}</h3>
-
-                <span className="github-connected-badge">
-                  <span className="github-status-dot" />
-                  Connected
-                </span>
+          <div className="github-connected-card">
+            <div className="github-connected-main">
+              <div className="github-connected-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor">
+                  <path d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.55.1.76-.24.76-.53v-2.08c-3.1.67-3.76-1.32-3.76-1.32-.5-1.29-1.24-1.63-1.24-1.63-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15.99 1.7 2.6 1.21 3.23.93.1-.72.39-1.21.71-1.49-2.48-.28-5.09-1.24-5.09-5.52 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.05 1.15a10.6 10.6 0 0 1 5.55 0c2.11-1.45 3.05-1.15 3.05-1.15.61 1.54.23 2.68.11 2.96.72.78 1.15 1.78 1.15 3 0 4.29-2.62 5.23-5.11 5.51.4.35.76 1.02.76 2.06V22c0 .29.2.63.77.52A11.1 11.1 0 0 0 12 .9Z" />
+                </svg>
               </div>
 
-              <p className="github-repo-description">
-                {repository.description || "No repository description available."}
-              </p>
-
-              {repository.language && (
-                <span className="github-language">
-                  <span className="github-language-dot" />
-                  {repository.language}
+              <div className="github-connected-details">
+                <span className="github-connected-label">
+                  <span className="github-status-dot" />
+                  Repository connected
                 </span>
-              )}
+
+                <h3>{repository.repo_name}</h3>
+                <p>
+                  {repository.description || "No repository description provided."}
+                </p>
+              </div>
             </div>
 
-            <div className="github-repo-actions">
-              <a
-                href={repository.html_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="github-open-button"
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden="true"
+            <div className="github-footer-actions">
+              {repository.html_url && (
+                <a
+                  href={repository.html_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="github-open-button"
                 >
-                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.4.6.1.8-.3.8-.6v-2.2c-3.34.7-4.04-1.4-4.04-1.4-.55-1.4-1.33-1.8-1.33-1.8-1.1-.75.08-.74.08-.74 1.2.08 1.84 1.23 1.84 1.23 1.08 1.84 2.83 1.3 3.52 1 .1-.78.42-1.3.76-1.6-2.67-.3-5.47-1.34-5.47-5.95 0-1.3.47-2.36 1.24-3.2-.12-.3-.54-1.52.12-3.16 0 0 1.01-.32 3.3 1.22a11.4 11.4 0 0 1 6 0c2.29-1.54 3.3-1.22 3.3-1.22.66 1.64.24 2.86.12 3.16.77.84 1.24 1.9 1.24 3.2 0 4.62-2.8 5.64-5.48 5.94.43.37.81 1.1.81 2.22v3.3c0 .3.2.7.8.6A12.01 12.01 0 0 0 24 12C24 5.37 18.63 0 12 0Z" />
-                </svg>
-                <span>Open on GitHub</span>
-                <span className="github-open-arrow" aria-hidden="true">↗</span>
-              </a>
+                  Open on GitHub ↗
+                </a>
+              )}
 
               <button
                 type="button"
-                className="github-refresh-button"
-                onClick={fetchRepository}
-                title="Refresh repository information"
-                aria-label="Refresh repository information"
+                className="github-disconnect-button"
+                onClick={disconnectRepository}
+                disabled={disconnecting}
               >
-                ↻
+                {disconnecting ? "Disconnecting..." : "Disconnect"}
               </button>
             </div>
           </div>
 
           <div className="github-stats-grid">
             <div className="github-stat-card">
-              <span className="github-stat-label">Stars</span>
-              <strong>{repository.stars ?? 0}</strong>
+              <span className="github-stat-icon">★</span>
+              <div>
+                <p>Stars</p>
+                <strong>{repository.stars ?? 0}</strong>
+              </div>
             </div>
 
             <div className="github-stat-card">
-              <span className="github-stat-label">Forks</span>
-              <strong>{repository.forks ?? 0}</strong>
+              <span className="github-stat-icon">⑂</span>
+              <div>
+                <p>Forks</p>
+                <strong>{repository.forks ?? 0}</strong>
+              </div>
             </div>
 
             <div className="github-stat-card">
-              <span className="github-stat-label">Open Issues</span>
-              <strong>{repository.open_issues ?? 0}</strong>
+              <span className="github-stat-icon">◎</span>
+              <div>
+                <p>Open Issues</p>
+                <strong>{repository.open_issues ?? 0}</strong>
+              </div>
             </div>
 
             <div className="github-stat-card">
-              <span className="github-stat-label">Language</span>
-              <strong>{repository.language || "—"}</strong>
+              <span className="github-stat-icon">⌘</span>
+              <div>
+                <p>Language</p>
+                <strong>{repository.language || "N/A"}</strong>
+              </div>
             </div>
           </div>
 
-          <div className="github-commits-section">
-            <div className="github-commits-heading">
+          <section className="github-content-section">
+            <div className="github-section-title">
               <div>
-                <h3>Recent Commits</h3>
-                <p>Latest changes pushed to this repository.</p>
+                <h3>Issues</h3>
+                <p>Import GitHub issues into your DevFlow task board.</p>
               </div>
-
-              <a
-                href={`${repository.html_url}/commits`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="github-view-all-link"
-              >
-                View all ↗
-              </a>
+              <span className="github-count-badge">{issues.length}</span>
             </div>
 
-            {Array.isArray(repository.commits) && repository.commits.length > 0 ? (
-              <div className="github-commits-list">
-                {repository.commits.map((commit, index) => (
-                  <a
-                    className="github-commit-item"
-                    key={commit.sha || index}
-                    href={commit.html_url || `${repository.html_url}/commits`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <div className="github-commit-icon" aria-hidden="true">
-                      ↗
-                    </div>
+            <div className="github-issue-filters">
+              {["all", "open", "closed"].map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  className={issueFilter === filter ? "active" : ""}
+                  onClick={() => setIssueFilter(filter)}
+                >
+                  {filter[0].toUpperCase() + filter.slice(1)}
+                  {" ("}
+                  {filter === "all"
+                    ? issues.length
+                    : issues.filter((issue) => issue.state === filter).length}
+                  {")"}
+                </button>
+              ))}
+            </div>
 
-                    <div className="github-commit-content">
-                      <p className="github-commit-message">
-                        {commit.message || "Commit message unavailable"}
-                      </p>
-
-                      <span className="github-commit-meta">
-                        {commit.author || "Unknown author"} · {formatDate(commit.date)}
-                      </span>
-                    </div>
-
-                    {commit.sha && (
-                      <code className="github-commit-sha">
-                        {commit.sha.slice(0, 7)}
-                      </code>
-                    )}
-                  </a>
-                ))}
+            {filteredIssues.length === 0 ? (
+              <div className="github-empty-state">
+                <span className="github-empty-icon">✓</span>
+                <h4>
+                  {issues.length === 0
+                    ? "No issues found"
+                    : `No ${issueFilter} issues`}
+                </h4>
+                <p>
+                  {issues.length === 0
+                    ? "No issues were returned by GitHub for this repository."
+                    : "Try another filter to see more issues."}
+                </p>
               </div>
             ) : (
-              <div className="github-no-commits">
-                No recent commits were returned by GitHub.
+              <div className="github-issues-list">
+                {filteredIssues.map((issue) => {
+                  const issueNumber = issue.number;
+                  const isImporting = Boolean(importingIssues[issueNumber]);
+                  const isImported = Boolean(importedIssues[issueNumber]);
+
+                  return (
+                    <article
+                      className="github-issue-card"
+                      key={issue.id || issueNumber}
+                    >
+                      <div className="github-issue-status">
+                        <span
+                          className={`github-issue-state ${
+                            issue.state === "closed" ? "closed" : "open"
+                          }`}
+                        >
+                          {issue.state === "closed" ? "✓ Closed" : "● Open"}
+                        </span>
+                      </div>
+
+                      <div className="github-issue-main">
+                        <a
+                          href={issue.html_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="github-issue-title"
+                        >
+                          {issue.title}
+                        </a>
+
+                        <p className="github-issue-meta">
+                          #{issueNumber} opened by{" "}
+                          <strong>{issue.author || "Unknown"}</strong>
+                          {" · "}
+                          {formatDate(issue.created_at)}
+                        </p>
+
+                        {Array.isArray(issue.labels) &&
+                          issue.labels.length > 0 && (
+                            <div className="github-issue-labels">
+                              {issue.labels.map((label) => (
+                                <span
+                                  className="github-issue-label"
+                                  key={`${issueNumber}-${label}`}
+                                >
+                                  {label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                        <button
+                          type="button"
+                          className="github-import-task-button"
+                          onClick={() => importIssue(issue)}
+                          disabled={isImporting || isImported}
+                        >
+                          {isImporting
+                            ? "Importing..."
+                            : isImported
+                              ? "✓ Imported"
+                              : "＋ Import as Task"}
+                        </button>
+                      </div>
+
+                      <a
+                        href={issue.html_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="github-issue-link"
+                        aria-label={`Open issue ${issueNumber} on GitHub`}
+                      >
+                        ↗
+                      </a>
+                    </article>
+                  );
+                })}
               </div>
             )}
-          </div>
+          </section>
 
-          <div className="github-footer-actions">
-            <button
-              type="button"
-              className="github-secondary-button"
-              onClick={() => {
-                setRepoInput(repository.repo_name || "");
-                setShowConnectForm(true);
-                setRepository(null);
-              }}
-            >
-              Change Repository
-            </button>
-
-            <button
-              type="button"
-              className="github-danger-button"
-              onClick={disconnectRepository}
-            >
-              Disconnect
-            </button>
-          </div>
-
-          {showConnectForm && (
-            <form className="github-connect-form github-change-form" onSubmit={connectRepository}>
-              <label htmlFor={`github-change-${projectId}`}>
-                New repository URL or owner/repository
-              </label>
-
-              <input
-                id={`github-change-${projectId}`}
-                type="text"
-                value={repoInput}
-                onChange={(event) => setRepoInput(event.target.value)}
-                placeholder="e.g. django/django"
-                required
-              />
-
-              <div className="github-form-actions">
-                <button
-                  type="submit"
-                  className="github-primary-button"
-                  disabled={connecting}
-                >
-                  {connecting ? "Connecting..." : "Save Repository"}
-                </button>
-
-                <button
-                  type="button"
-                  className="github-secondary-button"
-                  onClick={() => {
-                    setShowConnectForm(false);
-                    fetchRepository();
-                  }}
-                  disabled={connecting}
-                >
-                  Cancel
-                </button>
+          <section className="github-content-section">
+            <div className="github-section-title">
+              <div>
+                <h3>Recent Commits</h3>
+                <p>Latest changes pushed to the repository.</p>
               </div>
-            </form>
-          )}
+              <span className="github-count-badge">{commits.length}</span>
+            </div>
+
+            {commits.length === 0 ? (
+              <div className="github-empty-state">
+                <h4>No recent commits found</h4>
+                <p>
+                  Commits may be unavailable or the repository may be empty.
+                </p>
+              </div>
+            ) : (
+              <div className="github-commits-list">
+                {commits.map((commit, index) => (
+                  <article
+                    className="github-commit-card"
+                    key={commit.sha || index}
+                  >
+                    <div className="github-commit-icon">⌘</div>
+
+                    <div className="github-commit-main">
+                      <a
+                        href={commit.html_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="github-commit-message"
+                      >
+                        {commit.message || "Commit message unavailable"}
+                      </a>
+
+                      <p className="github-commit-meta">
+                        <strong>{commit.author || "Unknown author"}</strong>
+                        {" · "}
+                        {formatDate(commit.date)}
+                      </p>
+                    </div>
+
+                    <code className="github-commit-sha">
+                      {commit.sha || "—"}
+                    </code>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
         </>
       )}
     </section>

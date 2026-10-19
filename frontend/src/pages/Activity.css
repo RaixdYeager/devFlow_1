@@ -1,0 +1,282 @@
+
+.activity-refresh-button {
+  flex-shrink: 0;
+  padding: 11px 15px;
+  border: 1px solid #2563eb;
+  border-radius: 9px;
+  background: #2563eb;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.activity-refresh-button:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.activity-refresh-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.activity-panel {
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #e2e7ee;
+  border-radius: 16px;
+  box-shadow: 0 7px 25px rgba(16, 24, 40, 0.035);
+}
+
+.activity-panel-heading {
+  padding: 22px 25px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.activity-panel-heading h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 18px;
+  letter-spacing: -0.3px;
+}
+
+.activity-panel-heading p {
+  margin: 6px 0 0;
+  color: #98a2b3;
+  font-size: 12px;
+}
+
+.activity-timeline {
+  padding: 8px 25px 12px;
+}
+
+.activity-entry {
+  position: relative;
+  display: flex;
+  gap: 17px;
+  padding: 23px 0;
+}
+
+.activity-entry:not(:last-child)::before {
+  position: absolute;
+  top: 53px;
+  bottom: -23px;
+  left: 15px;
+  width: 2px;
+  background: #e8edf4;
+  content: "";
+}
+
+.activity-marker {
+  position: relative;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #eff6ff;
+}
+
+.activity-marker span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2563eb;
+}
+
+.activity-marker.task {
+  background: #ecfdf3;
+  border-color: #d1fadf;
+}
+
+.activity-marker.task span {
+  background: #12b76a;
+}
+
+.activity-marker.status {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.activity-marker.status span {
+  background: #ea580c;
+}
+
+.activity-marker.comment {
+  background: #f4f3ff;
+  border-color: #e9d7fe;
+}
+
+.activity-marker.comment span {
+  background: #7f56d9;
+}
+
+.activity-marker.member {
+  background: #fdf2fa;
+  border-color: #fcceee;
+}
+
+.activity-marker.member span {
+  background: #c11574;
+}
+
+.activity-entry-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.activity-entry-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.activity-type {
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.activity-type.task {
+  color: #039855;
+}
+
+.activity-type.status {
+  color: #c2410c;
+}
+
+.activity-type.comment {
+  color: #6941c6;
+}
+
+.activity-type.member {
+  color: #c11574;
+}
+
+.activity-entry-top time {
+  color: #98a2b3;
+  font-size: 11px;
+}
+
+.activity-description {
+  margin: 9px 0 12px;
+  color: #344054;
+  font-size: 14px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.activity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 17px;
+  color: #98a2b3;
+  font-size: 11px;
+}
+
+.activity-meta strong {
+  color: #667085;
+  font-weight: 700;
+}
+
+.activity-empty {
+  min-height: 250px;
+  padding: 35px 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.activity-empty-icon {
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 25px;
+  font-weight: 800;
+}
+
+.activity-empty h3 {
+  margin: 15px 0 0;
+  color: #172033;
+  font-size: 18px;
+}
+
+.activity-empty p {
+  max-width: 420px;
+  margin: 8px 0 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.activity-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: activity-spin 0.8s linear infinite;
+}
+
+@keyframes activity-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .activity-entry-top {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .activity-timeline {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .activity-panel-heading {
+    padding: 19px;
+  }
+}
+
+@media (max-width: 480px) {
+  .activity-heading {
+    flex-direction: column;
+  }
+
+  .activity-refresh-button {
+    width: 100%;
+  }
+
+  .activity-entry {
+    gap: 12px;
+  }
+
+  .activity-entry:not(:last-child)::before {
+    left: 14px;
+  }
+
+  .activity-description {
+    font-size: 13px;
+  }
+}

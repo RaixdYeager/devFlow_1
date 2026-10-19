@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -15,18 +16,21 @@ function Signup() {
   const [loading, setLoading] = useState(false);
 
   const handleChange = (event) => {
-    setFormData({
-      ...formData,
-      [event.target.name]: event.target.value,
-    });
+    const { name, value } = event.target;
+
+    setFormData((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
+    if (loading) return;
+
     setError("");
 
-    // Check passwords before sending request
     if (formData.password !== formData.confirm_password) {
       setError("Passwords do not match.");
       return;
@@ -43,31 +47,33 @@ function Signup() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(formData),
-        },
+        }
       );
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setError(
+        const details =
           data.detail ||
-            data.error ||
-            data.message ||
-            "Something went wrong. Please try again.",
-        );
+          data.error ||
+          data.message ||
+          Object.values(data)
+            .flat()
+            .filter((value) => typeof value === "string")
+            .join(" ");
 
-        setLoading(false);
+        setError(
+          details || "Something went wrong. Please try again."
+        );
         return;
       }
 
-      console.log("Signup successful:", data);
-
-      // Go to login after successful signup
-      navigate("/login");
-    } catch (error) {
-      console.error("Signup error:", error);
-
-      setError("Unable to connect to the server. Make sure Django is running.");
+      navigate("/login", { replace: true });
+    } catch (err) {
+      console.error("Signup error:", err);
+      setError(
+        "Unable to connect to the server. Make sure Django is running."
+      );
     } finally {
       setLoading(false);
     }
@@ -83,14 +89,18 @@ function Signup() {
         <div className="auth-card">
           <div className="auth-header">
             <h1>Create your account</h1>
-
-            <p>Start organizing your development workflow with DevFlow.</p>
+            <p>
+              Start organizing your development workflow with DevFlow.
+            </p>
           </div>
 
-          <form className="auth-form" onSubmit={handleSubmit}>
+          <form
+            className="auth-form"
+            onSubmit={handleSubmit}
+            autoComplete="on"
+          >
             <div className="form-group">
               <label htmlFor="name">Full name</label>
-
               <input
                 id="name"
                 name="name"
@@ -98,13 +108,13 @@ function Signup() {
                 placeholder="Your name"
                 value={formData.name}
                 onChange={handleChange}
+                autoComplete="name"
                 required
               />
             </div>
 
             <div className="form-group">
               <label htmlFor="email">Email address</label>
-
               <input
                 id="email"
                 name="email"
@@ -112,13 +122,13 @@ function Signup() {
                 placeholder="you@example.com"
                 value={formData.email}
                 onChange={handleChange}
+                autoComplete="email"
                 required
               />
             </div>
 
             <div className="form-group">
               <label htmlFor="password">Password</label>
-
               <input
                 id="password"
                 name="password"
@@ -126,27 +136,38 @@ function Signup() {
                 placeholder="Create a password"
                 value={formData.password}
                 onChange={handleChange}
+                autoComplete="new-password"
                 required
               />
             </div>
 
             <div className="form-group">
-              <label htmlFor="confirm-password">Confirm password</label>
-
+              <label htmlFor="confirm_password">
+                Confirm password
+              </label>
               <input
-                id="confirm-password"
+                id="confirm_password"
                 name="confirm_password"
                 type="password"
                 placeholder="Confirm your password"
                 value={formData.confirm_password}
                 onChange={handleChange}
+                autoComplete="new-password"
                 required
               />
             </div>
 
-            {error && <p className="auth-error">{error}</p>}
+            {error && (
+              <p className="auth-error" role="alert">
+                {error}
+              </p>
+            )}
 
-            <button type="submit" className="auth-submit" disabled={loading}>
+            <button
+              type="submit"
+              className="auth-submit"
+              disabled={loading}
+            >
               {loading ? "Creating account..." : "Create account"}
             </button>
           </form>
@@ -156,7 +177,8 @@ function Signup() {
           </div>
 
           <p className="auth-switch">
-            Already have an account? <Link to="/login">Log in</Link>
+            Already have an account?{" "}
+            <Link to="/login">Log in</Link>
           </p>
         </div>
 

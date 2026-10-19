@@ -1,3 +1,4 @@
+
 import { Routes, Route } from "react-router-dom";
 import "./App.css";
 
@@ -11,49 +12,26 @@ import Dashboard from "./pages/Dashboard";
 import ProjectDetail from "./pages/ProjectDetail";
 import KanbanBoard from "./pages/KanbanBoard";
 import TaskDetail from "./pages/TaskDetail";
+import Notifications from "./pages/Notifications";
+import Activity from "./pages/Activity";
 
 function App() {
   return (
     <Routes>
-      {/* =========================
-          LANDING PAGE
-      ========================= */}
+      {/* Landing page */}
+      <Route path="/" element={<LandingPage />} />
 
-      <Route
-        path="/"
-        element={<LandingPage />}
-      />
-
-      {/* =========================
-          PUBLIC AUTH ROUTES
-      ========================= */}
-
+      {/* Public authentication routes */}
       <Route element={<PublicRoute />}>
-        <Route
-          path="/login"
-          element={<Login />}
-        />
-
-        <Route
-          path="/signup"
-          element={<Signup />}
-        />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
       </Route>
 
-      {/* =========================
-          PROTECTED ROUTES
-      ========================= */}
-
+      {/* Protected application routes */}
       <Route element={<ProtectedRoute />}>
-        <Route
-          path="/dashboard"
-          element={<Dashboard />}
-        />
+        <Route path="/dashboard" element={<Dashboard />} />
 
-        <Route
-          path="/projects/:id"
-          element={<ProjectDetail />}
-        />
+        <Route path="/projects/:id" element={<ProjectDetail />} />
 
         <Route
           path="/projects/:id/board"
@@ -63,6 +41,16 @@ function App() {
         <Route
           path="/projects/:id/tasks/:taskId"
           element={<TaskDetail />}
+        />
+
+        <Route
+          path="/notifications"
+          element={<Notifications />}
+        />
+
+        <Route
+          path="/activity"
+          element={<Activity />}
         />
       </Route>
     </Routes>

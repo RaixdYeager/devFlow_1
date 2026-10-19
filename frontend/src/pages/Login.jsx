@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -13,14 +14,18 @@ function Login() {
   const [loading, setLoading] = useState(false);
 
   const handleChange = (event) => {
-    setFormData({
-      ...formData,
-      [event.target.name]: event.target.value,
-    });
+    const { name, value } = event.target;
+
+    setFormData((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (loading) return;
 
     setError("");
     setLoading(true);
@@ -34,29 +39,34 @@ function Login() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(formData),
-        },
+        }
       );
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setError(data.detail || "Invalid username or password.");
-        setLoading(false);
+        setError(
+          data.detail ||
+            data.error ||
+            "Invalid username or password."
+        );
         return;
       }
 
-      // Save JWT tokens
+      if (!data.access || !data.refresh) {
+        setError("Login failed: the server did not return JWT tokens.");
+        return;
+      }
+
       localStorage.setItem("access_token", data.access);
       localStorage.setItem("refresh_token", data.refresh);
 
-      console.log("Login successful");
-
-      // Go to dashboard
-      navigate("/dashboard");
-    } catch (error) {
-      console.error("Login error:", error);
-
-      setError("Unable to connect to the server. Make sure Django is running.");
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      console.error("Login error:", err);
+      setError(
+        "Unable to connect to the server. Make sure Django is running."
+      );
     } finally {
       setLoading(false);
     }
@@ -72,14 +82,18 @@ function Login() {
         <div className="auth-card">
           <div className="auth-header">
             <h1>Welcome back</h1>
-
-            <p>Log in to continue managing your development workflow.</p>
+            <p>
+              Log in to continue managing your development workflow.
+            </p>
           </div>
 
-          <form className="auth-form" onSubmit={handleSubmit}>
+          <form
+            className="auth-form"
+            onSubmit={handleSubmit}
+            autoComplete="on"
+          >
             <div className="form-group">
               <label htmlFor="username">Username</label>
-
               <input
                 id="username"
                 name="username"
@@ -87,13 +101,13 @@ function Login() {
                 placeholder="Your username"
                 value={formData.username}
                 onChange={handleChange}
+                autoComplete="username"
                 required
               />
             </div>
 
             <div className="form-group">
               <label htmlFor="password">Password</label>
-
               <input
                 id="password"
                 name="password"
@@ -101,13 +115,22 @@ function Login() {
                 placeholder="Your password"
                 value={formData.password}
                 onChange={handleChange}
+                autoComplete="current-password"
                 required
               />
             </div>
 
-            {error && <p className="auth-error">{error}</p>}
+            {error && (
+              <p className="auth-error" role="alert">
+                {error}
+              </p>
+            )}
 
-            <button type="submit" className="auth-submit" disabled={loading}>
+            <button
+              type="submit"
+              className="auth-submit"
+              disabled={loading}
+            >
               {loading ? "Logging in..." : "Log in"}
             </button>
           </form>
@@ -117,7 +140,8 @@ function Login() {
           </div>
 
           <p className="auth-switch">
-            Don't have an account? <Link to="/signup">Create one</Link>
+            Don't have an account?{" "}
+            <Link to="/signup">Create one</Link>
           </p>
         </div>
 
